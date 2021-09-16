@@ -9,6 +9,16 @@ import (
 	"sync"
 )
 
+// ForwarderRequestConfigureFunc modifies the request by adding headers
+// containing the client information for this request.
+//
+// This function might remove existing headers that conflict with the new
+// headers that will be added.
+//
+// Even though this function should not remove more than necessary, callers
+// must assume this function can remove all the headers. If there are headers
+// that are absolutely needed, it is the callers' responsibility to restore
+// them after calling this function.
 type ForwarderRequestConfigureFunc func(req *http.Request) error
 
 type Forwarder interface {
