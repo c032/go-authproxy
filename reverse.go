@@ -2,11 +2,9 @@ package authproxy
 
 import (
 	"errors"
-	"io"
+	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
-	"sync"
 
 	"github.com/c032/go-logger"
 )
@@ -17,10 +15,6 @@ type ReverseHTTPAuthenticateFunc func(req *http.Request) (ClientInfo, error)
 
 const ReverseHTTPDefaultHeaderPrefix = "Internal-"
 
-type ReverseHTTPForwardDestination struct {
-	URLPrefix string
-}
-
 // ReverseHTTP is a reverse proxy.
 //
 // Public members should only be modified during initialization, before calling
@@ -28,15 +22,12 @@ type ReverseHTTPForwardDestination struct {
 type ReverseHTTP struct {
 	HeaderPrefix string
 
-	ForwardTo ReverseHTTPForwardDestination
+	Forwarder Forwarder
 
 	// Must be set by whoever creates the struct.
 	AuthenticateFunc ReverseHTTPAuthenticateFunc
 
 	Logger logger.Logger
-
-	mu sync.Mutex
-	c  *http.Client
 }
 
 func (r *ReverseHTTP) logger() logger.Logger {
@@ -47,17 +38,6 @@ func (r *ReverseHTTP) logger() logger.Logger {
 	}
 
 	return log
-}
-
-func (r *ReverseHTTP) client() *http.Client {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.c == nil {
-		r.c = &http.Client{}
-	}
-
-	return r.c
 }
 
 func (r *ReverseHTTP) headerPrefix() string {
@@ -85,33 +65,6 @@ func (r *ReverseHTTP) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	ci, err = r.AuthenticateFunc(req)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-
-		return
-	}
-
-	var forwardURL *url.URL
-	forwardURL, err = url.Parse(r.ForwardTo.URLPrefix)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-
-		return
-	}
-
-	if !strings.HasSuffix(forwardURL.Path, "/") {
-		forwardURL.Path += "/"
-	}
-
-	if req.URL.Path != "/" {
-		forwardURL.Path += req.URL.Path[1:]
-	}
-
-	forwardURL.RawQuery = req.URL.RawQuery
-
-	var forwardRequest *http.Request
-
-	forwardRequest, err = http.NewRequest(req.Method, forwardURL.String(), req.Body)
-	if err != nil {
 		if err == ErrUnauthorized {
 			w.WriteHeader(http.StatusUnauthorized)
 		} else {
@@ -123,47 +76,29 @@ func (r *ReverseHTTP) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	for k, values := range req.Header {
-		if strings.HasPrefix(k, headerPrefix) {
-			continue
+	err = r.Forwarder.Forward(w, req, func(forwardRequest *http.Request) error {
+		for k, values := range req.Header {
+			if strings.HasPrefix(k, headerPrefix) {
+				continue
+			}
+
+			for _, v := range values {
+				forwardRequest.Header.Add(k, v)
+			}
 		}
 
-		for _, v := range values {
-			forwardRequest.Header.Add(k, v)
+		if ci != nil {
+			for rawKey, v := range ci {
+				k := headerPrefix + rawKey
+				forwardRequest.Header.Set(k, v)
+			}
 		}
-	}
 
-	if ci != nil {
-		for rawKey, v := range ci {
-			k := headerPrefix + rawKey
-			forwardRequest.Header.Set(k, v)
-		}
-	}
-
-	httpClient := r.client()
-
-	var resp *http.Response
-
-	resp, err = httpClient.Do(forwardRequest)
+		return nil
+	})
 	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
+		err = fmt.Errorf("could not forward request: %w", err)
 
-		return
-	}
-	defer resp.Body.Close()
-
-	wHeaders := w.Header()
-	for header, values := range resp.Header {
-		wHeaders.Del(header)
-		for _, value := range values {
-			wHeaders.Add(header, value)
-		}
-	}
-
-	_, err = io.Copy(w, resp.Body)
-	if err != nil {
 		log.Print(err.Error())
-
-		return
 	}
 }

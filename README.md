@@ -1,6 +1,6 @@
 # go-authproxy
 
-Reverse proxy for client authentication.
+Reverse proxy library for client authorization and authentication.
 
 ## How to use
 
@@ -39,8 +39,8 @@ func main() {
 
 			return ci, nil
 		},
-		ForwardTo: authproxy.ReverseHTTPForwardDestination{
-			URLPrefix: "http://internal.service.example/",
+		Forwarder: authproxy.HTTPBaseURLForwarder{
+			BaseURL:: "http://internal.service.example/",
 		},
 	}
 
@@ -50,6 +50,25 @@ func main() {
 	}
 }
 ```
+
+## Implementations of the `Forwarder` interface
+
+### `HTTPBaseURLForwarder`
+
+Given:
+
+* Example request URL: `http://public.example/original/path`
+* Example forwarder base URL: `http://internal.service.example/prefix`
+
+The URLs are resolved with steps equivalent to these:
+
+* Extract the path from the original request, without the leading slash:
+  `original/path`.
+* Ensure the forwarder base URL's path has a trailing slash: `/prefix`
+  becomes `/prefix/`.
+* Parse `http://internal.service.example/prefix/` into a variable, e.g.
+  `forwardURL`.
+* Create the final URL using `forwardURL.Parse("original/path")`.
 
 ## License
 

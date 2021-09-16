@@ -25,8 +25,8 @@ func auth(req *http.Request) (authproxy.ClientInfo, error) {
 
 func main() {
 	const (
-		listenAddr  = ":3000"
-		forwardAddr = "http://localhost:8000/"
+		listenAddr        = ":3000"
+		forwardBaseURLStr = "http://localhost:8000/"
 	)
 
 	log := logger.Default
@@ -35,8 +35,8 @@ func main() {
 		Logger: log,
 
 		AuthenticateFunc: auth,
-		ForwardTo: authproxy.ReverseHTTPForwardDestination{
-			URLPrefix: forwardAddr,
+		Forwarder: &authproxy.HTTPBaseURLForwarder{
+			BaseURL: forwardBaseURLStr,
 		},
 	}
 
