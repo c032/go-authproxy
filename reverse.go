@@ -73,6 +73,16 @@ func (r *ReverseHTTP) headerPrefix() string {
 
 func (r *ReverseHTTP) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.RLock()
+	forwarder := r.Forwarder
+	r.RUnlock()
+
+	if forwarder == nil {
+		w.WriteHeader(http.StatusBadGateway)
+
+		return
+	}
+
+	r.RLock()
 	log := r.logger()
 	r.RUnlock()
 
@@ -105,7 +115,7 @@ func (r *ReverseHTTP) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = r.Forwarder.Forward(w, req, func(forwardRequest *http.Request) error {
+	err = forwarder.Forward(w, req, func(forwardRequest *http.Request) error {
 		for k, values := range req.Header {
 			if strings.HasPrefix(k, headerPrefix) {
 				continue
