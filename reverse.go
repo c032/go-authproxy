@@ -20,13 +20,26 @@ const ReverseHTTPDefaultHeaderPrefix = "Internal-"
 // Public members should only be modified during initialization, before calling
 // any struct methods.
 type ReverseHTTP struct {
+	// HeaderPrefix is the prefix that will be prepended to all new headers
+	// added to the forwarded request.
+	//
+	// If it's empty on first use, it's set to
+	// `ReverseHTTPDefaultHeaderPrefix`.
+	//
+	// It must end with a `-` character, otherwise a panic will happen on first
+	// use.
 	HeaderPrefix string
 
+	// Forwarder is the interface that sends the request to its next
+	// destination.
 	Forwarder Forwarder
 
 	// Must be set by whoever creates the struct.
 	AuthenticateFunc ReverseHTTPAuthenticateFunc
 
+	// Logger is the logger used by the methods of this struct.
+	//
+	// If `nil`, all logging is discarded.
 	Logger logger.Logger
 }
 
