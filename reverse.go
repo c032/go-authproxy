@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/c032/go-logger"
 )
@@ -20,6 +21,8 @@ const ReverseHTTPDefaultHeaderPrefix = "Internal-"
 // Public members should only be modified during initialization, before calling
 // any struct methods.
 type ReverseHTTP struct {
+	sync.RWMutex
+
 	// HeaderPrefix is the prefix that will be prepended to all new headers
 	// added to the forwarded request.
 	//
@@ -54,18 +57,31 @@ func (r *ReverseHTTP) logger() logger.Logger {
 }
 
 func (r *ReverseHTTP) headerPrefix() string {
+	log := r.logger()
+
 	headerPrefix := r.HeaderPrefix
 	if headerPrefix == "" {
 		headerPrefix = ReverseHTTPDefaultHeaderPrefix
+
+		log.WithFields(logger.Fields{
+			"new_prefix": headerPrefix,
+		}).Print("Updated `HeaderPrefix` because it was empty. Using default value.")
 	}
 
 	return headerPrefix
 }
 
 func (r *ReverseHTTP) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	r.RLock()
 	log := r.logger()
+	r.RUnlock()
 
+	r.Lock()
 	headerPrefix := r.headerPrefix()
+	r.Unlock()
+
+	r.RLock()
+	defer r.RUnlock()
 
 	if !strings.HasSuffix(headerPrefix, "-") {
 		panic("`headerPrefix` must end with a `-` character")
