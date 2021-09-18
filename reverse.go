@@ -82,16 +82,14 @@ func (r *ReverseHTTP) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	r.RLock()
-	log := r.logger()
-	r.RUnlock()
-
 	r.Lock()
 	headerPrefix := r.headerPrefix()
 	r.Unlock()
 
 	r.RLock()
 	defer r.RUnlock()
+
+	log := r.logger()
 
 	if !strings.HasSuffix(headerPrefix, "-") {
 		panic("`headerPrefix` must end with a `-` character")
